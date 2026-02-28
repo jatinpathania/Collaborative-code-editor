@@ -150,43 +150,5 @@ collaborative-code-editor/
 
 ---
 
-## Database Schema
-
-```prisma
-model Room {
-  id            String         @id @default(cuid())
-  name          String         @unique
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  users         User[]
-  codeSnapshots CodeSnapshot[]
-}
-
-model User {
-  id        String   @id @default(cuid())
-  username  String
-  roomId    String
-  room      Room     @relation(fields: [roomId], references: [id])
-  createdAt DateTime @default(now())
-}
-
-model CodeSnapshot {
-  id        String   @id @default(cuid())
-  roomId    String
-  room      Room     @relation(fields: [roomId], references: [id])
-  code      String
-  language  String
-  createdAt DateTime @default(now())
-}
-```
-
----
-
-## License
-
-MIT — open source, contributions welcome.
-
----
-
 **Built with Next.js · Socket.io · PostgreSQL · Docker**
 # Collaborative-code-editor
