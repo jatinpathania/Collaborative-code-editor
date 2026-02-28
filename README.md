@@ -111,8 +111,3 @@ collaborative-code-editor/
 ├── vercel.json              # Vercel build config
 └── package.json
 ```
-
----
-
-**Built with Next.js · Socket.io · PostgreSQL · Docker**
-# Collaborative-code-editor
