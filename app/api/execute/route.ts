@@ -3,9 +3,10 @@ import { spawn } from "child_process";
 import { writeFileSync, mkdirSync, rmSync } from "fs";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
+import os from "os";
 
 export async function POST(request: NextRequest) {
-  const tempDir = path.join(process.cwd(), "temp", uuidv4());
+  const tempDir = path.join(os.tmpdir(), "code-editor", uuidv4());
 
   try {
     const { code, language, input } = await request.json();
@@ -19,89 +20,59 @@ export async function POST(request: NextRequest) {
 
     mkdirSync(tempDir, { recursive: true });
 
-    // Write stdin input file — always write it (even empty) so we can always redirect
     const inputFile = path.join(tempDir, "input.txt");
     writeFileSync(inputFile, typeof input === "string" ? input : "");
 
-    let dockerArgs: string[] = [];
+    let command = "";
+    let args: string[] = [];
 
     switch (language.toLowerCase()) {
       case "cpp": {
         writeFileSync(path.join(tempDir, "main.cpp"), code);
-        dockerArgs = [
-          "run", "--rm",
-          "--network", "none",
-          "--memory", "256m",
-          "--cpus", "0.5",
-          "-v", `${tempDir}:/app`,
-          "-w", "/app",
-          "gcc:latest",
-          "sh", "-c",
-          "g++ main.cpp -o output 2>compile_error.txt && ./output <input.txt 2>&1 || (cat compile_error.txt >&2 && exit 1)",
+        command = "sh";
+        args = [
+          "-c",
+          `g++ "${path.join(tempDir, "main.cpp")}" -o "${path.join(tempDir, "output")}" 2>"${path.join(tempDir, "compile_error.txt")}" && "${path.join(tempDir, "output")}" <"${inputFile}" 2>&1 || (cat "${path.join(tempDir, "compile_error.txt")}" >&2 && exit 1)`,
         ];
         break;
       }
 
       case "c": {
         writeFileSync(path.join(tempDir, "main.c"), code);
-        dockerArgs = [
-          "run", "--rm",
-          "--network", "none",
-          "--memory", "256m",
-          "--cpus", "0.5",
-          "-v", `${tempDir}:/app`,
-          "-w", "/app",
-          "gcc:latest",
-          "sh", "-c",
-          "gcc main.c -o output 2>compile_error.txt && ./output <input.txt 2>&1 || (cat compile_error.txt >&2 && exit 1)",
+        command = "sh";
+        args = [
+          "-c",
+          `gcc "${path.join(tempDir, "main.c")}" -o "${path.join(tempDir, "output")}" 2>"${path.join(tempDir, "compile_error.txt")}" && "${path.join(tempDir, "output")}" <"${inputFile}" 2>&1 || (cat "${path.join(tempDir, "compile_error.txt")}" >&2 && exit 1)`,
         ];
         break;
       }
 
       case "python": {
         writeFileSync(path.join(tempDir, "main.py"), code);
-        dockerArgs = [
-          "run", "--rm",
-          "--network", "none",
-          "--memory", "256m",
-          "--cpus", "0.5",
-          "-v", `${tempDir}:/app`,
-          "-w", "/app",
-          "python:3.11-alpine",
-          "sh", "-c",
-          "python main.py <input.txt 2>&1",
+        command = "sh";
+        args = [
+          "-c",
+          `python3 "${path.join(tempDir, "main.py")}" <"${inputFile}" 2>&1`,
         ];
         break;
       }
 
       case "javascript": {
         writeFileSync(path.join(tempDir, "main.js"), code);
-        dockerArgs = [
-          "run", "--rm",
-          "--network", "none",
-          "--memory", "256m",
-          "--cpus", "0.5",
-          "-v", `${tempDir}:/app`,
-          "-w", "/app",
-          "node:18-alpine",
-          "sh", "-c",
-          "node main.js <input.txt 2>&1",
+        command = "sh";
+        args = [
+          "-c",
+          `node "${path.join(tempDir, "main.js")}" <"${inputFile}" 2>&1`,
         ];
         break;
       }
 
       case "java": {
         writeFileSync(path.join(tempDir, "Main.java"), code);
-        dockerArgs = [
-          "run", "--rm",
-          "--network", "none",
-          "--memory", "256m",
-          "--cpus", "0.5",
-          "-v", `${tempDir}:/app`,
-          "-w", "/app",
-          "eclipse-temurin:17-jdk-alpine",
-          "sh", "-c",
-          "javac Main.java 2>compile_error.txt && java Main <input.txt 2>&1 || (cat compile_error.txt >&2 && exit 1)",
+        command = "sh";
+        args = [
+          "-c",
+          `javac "${path.join(tempDir, "Main.java")}" 1>"${path.join(tempDir, "compile_error.txt")}" 2>&1 && java -cp "${tempDir}" Main <"${inputFile}" 2>&1 || (cat "${path.join(tempDir, "compile_error.txt")}" >&2 && exit 1)`,
         ];
         break;
       }
@@ -114,21 +85,24 @@ export async function POST(request: NextRequest) {
     }
 
     return await new Promise<NextResponse>((resolve) => {
-      const docker = spawn("docker", dockerArgs, { timeout: 30000 });
+      const process = spawn(command, args, { timeout: 30000 });
 
       let stdout = "";
       let stderr = "";
 
-      docker.stdout.on("data", (data: Buffer) => {
+      process.stdout.on("data", (data: Buffer) => {
         stdout += data.toString();
       });
 
-      docker.stderr.on("data", (data: Buffer) => {
+      process.stderr.on("data", (data: Buffer) => {
         stderr += data.toString();
       });
 
-      docker.on("close", (code: number | null) => {
-        rmSync(tempDir, { recursive: true, force: true });
+      process.on("close", (code: number | null) => {
+        // Delay cleanup slightly
+        setTimeout(() => {
+          try { rmSync(tempDir, { recursive: true, force: true }); } catch (e) { }
+        }, 1000);
 
         if (code !== 0) {
           resolve(
@@ -146,18 +120,17 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      docker.on("error", (err: Error) => {
-        rmSync(tempDir, { recursive: true, force: true });
+      process.on("error", (err: Error) => {
+        try { rmSync(tempDir, { recursive: true, force: true }); } catch (e) { }
         resolve(
           NextResponse.json({
             output: "",
-            error: `Failed to run Docker: ${err.message}`,
+            error: `Failed to execute: ${err.message}`,
           })
         );
       });
     });
   } catch (error) {
-    // Clean up on unexpected errors
     try { rmSync(tempDir, { recursive: true, force: true }); } catch { }
     return NextResponse.json(
       { error: "Execution failed: " + (error instanceof Error ? error.message : String(error)) },

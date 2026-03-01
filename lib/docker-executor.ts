@@ -52,7 +52,7 @@ export async function executeCode({ code, language, input }: ExecuteCodeParams):
   try {
     const startTime = Date.now();
 
-    const renderUrl = process.env.NEXT_PUBLIC_RENDER_URL || '';
+    const renderUrl = process.env.NEXT_PUBLIC_RENDER_URL
     const response = await fetch(`${renderUrl}/api/execute`, {
       method: 'POST',
       headers: {

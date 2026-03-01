@@ -122,17 +122,42 @@ export default function CodeEditor({ roomId, username, initialCode, initialLangu
   const { toast } = useToast();
 
   useEffect(() => {
-    const socket = io(process.env.NEXT_PUBLIC_RENDER_URL || '', {
+    // Smart Socket URL: In local dev (localhost), we want to connect to the local server.
+    // In production (Vercel), we want to connect to the RENDER_URL.
+    const isLocal = typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+    const socketUrl = isLocal ? '' : (process.env.NEXT_PUBLIC_RENDER_URL || '');
+
+    console.log(`[Socket] Connecting to: ${socketUrl || 'Current Origin (Local)'}`);
+
+    const socket = io(socketUrl, {
       transports: ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
+
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      console.log(`[Socket] Connected! ID: ${socket.id}`);
       setIsConnected(true);
-      socket.emit('join-room', { roomId, username });
+      const cleanRoomId = roomId.trim();
+      console.log(`[Socket] Joining Room: "${cleanRoomId}" as "${username}"`);
+      socket.emit('join-room', { roomId: cleanRoomId, username });
     });
 
-    socket.on('disconnect', () => {
+    socket.on('connect_error', (err) => {
+      console.error('[Socket] Connection Error:', err.message);
+      toast({
+        title: 'Connection Error',
+        description: `Failed to connect to ${socketUrl || 'local server'}.`,
+        variant: 'destructive',
+      });
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('[Socket] Disconnected:', reason);
       setIsConnected(false);
     });
 
@@ -202,7 +227,7 @@ export default function CodeEditor({ roomId, username, initialCode, initialLangu
     return () => {
       socket.disconnect();
     };
-  }, [roomId, username]);
+  }, [roomId, username, toast]);
 
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;

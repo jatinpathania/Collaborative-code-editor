@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import CodeEditor from '@/components/CodeEditor';
 import { Loader2 } from 'lucide-react';
@@ -12,13 +12,7 @@ function EditorContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [roomData, setRoomData] = useState<any>(null);
 
-  useEffect(() => {
-    if (roomId) {
-      fetchRoomData();
-    }
-  }, [roomId]);
-
-  const fetchRoomData = async () => {
+  const fetchRoomData = useCallback(async () => {
     try {
       const response = await fetch(`/api/rooms?roomId=${roomId}`);
       if (response.ok) {
@@ -30,7 +24,13 @@ function EditorContent() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [roomId]);
+
+  useEffect(() => {
+    if (roomId) {
+      fetchRoomData();
+    }
+  }, [roomId, fetchRoomData]);
 
   if (!roomId || !username) {
     return (
