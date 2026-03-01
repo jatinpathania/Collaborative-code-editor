@@ -118,13 +118,16 @@ async function start() {
     const app = express();
 
     // Scoped middleware to avoid interfering with Next.js
-    const corsMiddleware = cors({ origin: VERCEL_URL, methods: ['GET', 'POST'] });
+    const corsMiddleware = cors({ origin: VERCEL_URL, methods: ['GET', 'POST', 'OPTIONS'] });
 
-    app.get('/test-express', corsMiddleware, (req, res) => {
+    // Handle CORS preflight globally
+    app.use(corsMiddleware);
+
+    app.get('/test-express', (req, res) => {
         res.send('Express is working with scoped CORS!');
     });
 
-    app.post('/api/execute', corsMiddleware, express.json(), async (req, res) => {
+    app.post('/api/execute', express.json(), async (req, res) => {
         const tempDir = path.join(os.tmpdir(), "code-editor", uuidv4());
         try {
             const { code, language, input } = req.body;
@@ -187,7 +190,7 @@ async function start() {
     });
 
     // Delegate ALL other routes to Next.js
-    app.all('*any', (req, res) => {
+    app.all(/.*/, (req, res) => {
         return handle(req, res);
     });
 
