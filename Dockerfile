@@ -43,6 +43,8 @@ ENV NODE_ENV production
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+# Ensure our custom server.js is copied (it handles socket.io)
+COPY --from=builder /app/server.js ./server.js
 
 EXPOSE 3000
 
