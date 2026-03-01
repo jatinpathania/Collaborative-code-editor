@@ -31,7 +31,11 @@ RUN apk add --no-cache \
     g++ \
     gcc \
     openjdk17-jdk \
+    libc6-compat \
     libc-dev
+
+# Build-time verification: check if compilers are installed
+RUN which python3 && which g++ && which gcc && which javac && which java
 
 ENV NODE_ENV production
 

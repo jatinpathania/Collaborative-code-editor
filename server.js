@@ -204,6 +204,19 @@ async function start() {
     });
 
     registerSocketEvents(io);
+
+    // Debug: Check for available compilers
+    const checkBinaries = ['node', 'python3', 'gcc', 'g++', 'java', 'javac'];
+    console.log('[debug] Checking available binaries:');
+    checkBinaries.forEach(bin => {
+        const { execSync } = require('child_process');
+        try {
+            const path = execSync(`which ${bin}`).toString().trim();
+            console.log(`  - ${bin}: ${path}`);
+        } catch (e) {
+            console.log(`  - ${bin}: NOT FOUND`);
+        }
+    });
 }
 
 start().catch((err) => {
