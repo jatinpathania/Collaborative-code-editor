@@ -40,6 +40,10 @@ RUN apk add --no-cache \
 RUN which python3 && which g++ && which gcc && which javac && which java
 
 ENV NODE_ENV production
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
+
+EXPOSE 3000
 
 # Don't use a separate user for now to avoid permission issues with /tmp and compiler outputs
 # If you want to use 'nextjs' user, ensure they have write access to /tmp and /app
