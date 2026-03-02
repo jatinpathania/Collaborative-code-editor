@@ -122,110 +122,131 @@ export default function CodeEditor({ roomId, username, initialCode, initialLangu
   const { toast } = useToast();
 
   useEffect(() => {
-    // Smart Socket URL: In local dev (localhost), we want to connect to the local server.
-    // In production (Vercel), we want to connect to the RENDER_URL.
-    const isLocal = typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const socketUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
-    const socketUrl = isLocal ? '' : (process.env.NEXT_PUBLIC_RENDER_URL || '');
+    let isMounted = true;
 
-    console.log(`[Socket] Connecting to: ${socketUrl || 'Current Origin (Local)'}`);
+    const initSocket = async () => {
+      try {
+        await fetch('/api/init-socket');
+      } catch (err) {
+        console.error('Failed to initialize socket:', err);
+      }
 
-    const socket = io(socketUrl, {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+      if (!isMounted) return;
 
-    socketRef.current = socket;
-
-    socket.on('connect', () => {
-      console.log(`[Socket] Connected! ID: ${socket.id}`);
-      setIsConnected(true);
-      const cleanRoomId = roomId.trim();
-      console.log(`[Socket] Joining Room: "${cleanRoomId}" as "${username}"`);
-      socket.emit('join-room', { roomId: cleanRoomId, username });
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('[Socket] Connection Error:', err.message);
-      toast({
-        title: 'Connection Error',
-        description: `Failed to connect to ${socketUrl || 'local server'}.`,
-        variant: 'destructive',
+      const socket = io(socketUrl, {
+        path: '/api/socket',
+        transports: ['websocket', 'polling'],
+        reconnectionAttempts: 10,
+        reconnectionDelay: 2000,
       });
-    });
 
-    socket.on('disconnect', (reason) => {
-      console.log('[Socket] Disconnected:', reason);
-      setIsConnected(false);
-    });
+      socketRef.current = socket;
 
-    socket.on('code-change', ({ code: remoteCode }: { code: string }) => {
-      if (editorRef.current) {
-        isRemoteChange.current = true;
-        const model = editorRef.current.getModel();
-        if (model && model.getValue() !== remoteCode) {
-          editorRef.current.setValue(remoteCode);
+      socket.on('connect', () => {
+        if (!isMounted) {
+          socket.disconnect();
+          return;
         }
+        console.log(`[Socket] Connected! ID: ${socket.id}`);
+        setIsConnected(true);
+        const cleanRoomId = roomId.trim();
+        console.log(`[Socket] Joining Room: "${cleanRoomId}" as "${username}"`);
+        socket.emit('join-room', { roomId: cleanRoomId, username });
+      });
+
+      socket.on('connect_error', (err) => {
+        if (!isMounted) return;
+        console.error('[Socket] Connection Error:', err.message);
+        toast({
+          title: 'Connection Error',
+          description: `Failed to connect to ${socketUrl || 'local server'}.`,
+          variant: 'destructive',
+        });
+      });
+
+      socket.on('disconnect', (reason) => {
+        setIsConnected(false);
+      });
+
+      socket.on('code-change', ({ code: remoteCode }: { code: string }) => {
+        if (editorRef.current && isMounted) {
+          isRemoteChange.current = true;
+          const model = editorRef.current.getModel();
+          if (model && model.getValue() !== remoteCode) {
+            editorRef.current.setValue(remoteCode);
+          }
+          isRemoteChange.current = false;
+        }
+        setCode(remoteCode);
+      });
+
+      socket.on('room-state', ({ code: snapCode, language: snapLang, input: snapInput, output: snapOutput, executionTime: snapTime }: {
+        code?: string; language?: string; input?: string; output?: string; error?: string; executionTime?: number;
+      }) => {
+        if (!isMounted) return;
+        isRemoteChange.current = true;
+        if (snapCode !== undefined) {
+          setCode(snapCode);
+          if (editorRef.current) editorRef.current.setValue(snapCode);
+        }
+        if (snapLang !== undefined) setLanguage(snapLang);
+        if (snapInput !== undefined) setInput(snapInput);
+        if (snapOutput !== undefined) setOutput(snapOutput);
+        if (snapTime !== undefined) setExecutionTime(snapTime);
         isRemoteChange.current = false;
-      }
-      setCode(remoteCode);
-    });
+      });
 
-    socket.on('room-state', ({ code: snapCode, language: snapLang, input: snapInput, output: snapOutput, executionTime: snapTime }: {
-      code?: string; language?: string; input?: string; output?: string; error?: string; executionTime?: number;
-    }) => {
-      isRemoteChange.current = true;
-      if (snapCode !== undefined) {
-        setCode(snapCode);
-        if (editorRef.current) editorRef.current.setValue(snapCode);
-      }
-      if (snapLang !== undefined) setLanguage(snapLang);
-      if (snapInput !== undefined) setInput(snapInput);
-      if (snapOutput !== undefined) setOutput(snapOutput);
-      if (snapTime !== undefined) setExecutionTime(snapTime);
-      isRemoteChange.current = false;
-    });
+      socket.on('language-change', ({ language: remoteLang, code: remoteCode }: { language: string; code?: string }) => {
+        if (!isMounted) return;
+        isRemoteChange.current = true;
+        setLanguage(remoteLang);
+        const newCode = remoteCode ?? (LANGUAGES.find(l => l.value === remoteLang)?.defaultCode || '');
+        setCode(newCode);
+        if (editorRef.current) editorRef.current.setValue(newCode);
+        isRemoteChange.current = false;
+      });
 
-    socket.on('language-change', ({ language: remoteLang, code: remoteCode }: { language: string; code?: string }) => {
-      isRemoteChange.current = true;
-      setLanguage(remoteLang);
-      const newCode = remoteCode ?? (LANGUAGES.find(l => l.value === remoteLang)?.defaultCode || '');
-      setCode(newCode);
-      if (editorRef.current) editorRef.current.setValue(newCode);
-      isRemoteChange.current = false;
-    });
+      socket.on('users-update', (users: string[]) => {
+        if (!isMounted) return;
+        setOnlineUsers(users);
+      });
 
-    socket.on('users-update', (users: string[]) => {
-      setOnlineUsers(users);
-    });
+      socket.on('execution-start', () => {
+        if (!isMounted) return;
+        setIsExecuting(true);
+        setOutput('⏳ Executing...');
+        setExecutionTime(null);
+      });
 
-    socket.on('execution-start', () => {
-      setIsExecuting(true);
-      setOutput('⏳ Executing...');
-      setExecutionTime(null);
-    });
+      socket.on('execution-result', ({ output: remoteOutput, error, executionTime: time }: {
+        output: string; error?: string; executionTime: number;
+      }) => {
+        if (!isMounted) return;
+        setIsExecuting(false);
+        setExecutionTime(time);
+        if (error) {
+          const combined = [remoteOutput, error].filter(Boolean).join('\n--- Error ---\n');
+          setOutput(combined);
+        } else {
+          setOutput(remoteOutput || '(Program exited with no output)');
+        }
+      });
 
-    socket.on('execution-result', ({ output: remoteOutput, error, executionTime: time }: {
-      output: string; error?: string; executionTime: number;
-    }) => {
-      setIsExecuting(false);
-      setExecutionTime(time);
-      if (error) {
-        const combined = [remoteOutput, error].filter(Boolean).join('\n--- Error ---\n');
-        setOutput(combined);
-      } else {
-        setOutput(remoteOutput || '(Program exited with no output)');
-      }
-    });
+      socket.on('input-change', ({ input: remoteInput }: { input: string }) => {
+        if (!isMounted) return;
+        setInput(remoteInput);
+      });
+    };
 
-    socket.on('input-change', ({ input: remoteInput }: { input: string }) => {
-      setInput(remoteInput);
-    });
+    initSocket();
 
     return () => {
-      socket.disconnect();
+      isMounted = false;
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
   }, [roomId, username, toast]);
 

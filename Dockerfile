@@ -47,11 +47,6 @@ ENV NODE_ENV production
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-# Ensure our custom server.js is copied (it handles socket.io)
-COPY --from=builder /app/server.js ./server.js
-
-EXPOSE 3000
-
-ENV PORT 3000
-
+# CMD ["node", "server.js"] is already the default for Next.js standalone,
+# as it creates its own server.js in the standalone directory.
 CMD ["node", "server.js"]
