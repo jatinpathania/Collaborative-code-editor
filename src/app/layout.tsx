@@ -6,8 +6,11 @@ import { Toaster } from "@/components/ui/toaster";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Collaborative Code Editor",
+  title: "CodeSync | Collaborative Code Editor",
   description: "Real-time collaborative code editor with multi-language support",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

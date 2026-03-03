@@ -57,6 +57,26 @@ export function registerSocketEvents(io: Server) {
             socket.to(rId).emit('execution-result', { output, error, executionTime });
         });
 
+        socket.on('user-speaking', ({ roomId, username, isSpeaking }) => {
+            const rId = String(roomId || '').trim();
+            io.to(rId).emit('user-speaking', { username, isSpeaking });
+        });
+
+        socket.on('webrtc-offer', ({ to, roomId, offer }) => {
+            const rId = String(roomId || '').trim();
+            io.to(rId).emit('webrtc-offer', { from: currentUsername, offer });
+        });
+
+        socket.on('webrtc-answer', ({ to, roomId, answer }) => {
+            const rId = String(roomId || '').trim();
+            io.to(rId).emit('webrtc-answer', { from: currentUsername, answer });
+        });
+
+        socket.on('webrtc-ice-candidate', ({ to, roomId, candidate }) => {
+            const rId = String(roomId || '').trim();
+            io.to(rId).emit('webrtc-ice-candidate', { from: currentUsername, candidate });
+        });
+
         socket.on('disconnect', () => {
             if (!currentRoom || !roomUsers.has(currentRoom)) {
                 console.log(`[socket] Disconnect without room: ${socket.id}`);
