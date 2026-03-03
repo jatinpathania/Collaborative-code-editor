@@ -1,12 +1,20 @@
-<svg viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background -->
-  <rect width="192" height="192" rx="32" fill="#10b981"/>
-  
-  <!-- Code2 Icon (angle brackets) -->
-  <g transform="translate(48, 48)">
-    <!-- Left angle bracket -->
-    <path d="M 24 16 L 8 48 L 24 80" stroke="#000000" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-    <!-- Right angle bracket -->
-    <path d="M 72 16 L 88 48 L 72 80" stroke="#000000" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="64"
+     height="64"
+     viewBox="0 0 24 24"
+     fill="none"
+     stroke="#10b981"
+     stroke-width="2.5"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+
+  <!-- Left bracket -->
+  <polyline points="7 8 3 12 7 16"/>
+
+  <!-- Right bracket -->
+  <polyline points="17 8 21 12 17 16"/>
+
+  <!-- Slash -->
+  <line x1="14" y1="4" x2="10" y2="20"/>
+
 </svg>
