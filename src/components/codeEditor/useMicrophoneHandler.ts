@@ -41,7 +41,6 @@ export function useMicrophoneHandler({
 }: MicrophoneHandlerProps) {
     const handleMicrophoneToggle = useCallback(async () => {
         if (isMicEnabled) {
-            // Disable microphone - close everything
             if (micStreamRef.current) {
                 micStreamRef.current.getTracks().forEach(track => track.stop());
                 micStreamRef.current = null;
@@ -50,7 +49,6 @@ export function useMicrophoneHandler({
                 clearInterval(volumeCheckIntervalRef.current);
                 volumeCheckIntervalRef.current = null;
             }
-            // Close all WebRTC connections and reset manager
             if (webrtcManagerRef.current) {
                 webrtcManagerRef.current.closeAll();
                 webrtcManagerRef.current = null;
@@ -63,13 +61,36 @@ export function useMicrophoneHandler({
             setIsMicEnabled(false);
             toast({ title: 'Microphone Disabled' });
         } else {
-            // Enable microphone
             try {
+                // Check if running in secure context (HTTPS or localhost)
+                const isSecureContext = typeof window !== 'undefined' && 
+                    (window.isSecureContext || 
+                     window.location.protocol === 'https:' || 
+                     window.location.hostname === 'localhost' ||
+                     window.location.hostname === '127.0.0.1');
+
+                if (!isSecureContext) {
+                    toast({ 
+                        title: 'Error', 
+                        description: 'Microphone requires HTTPS. Please access your app using a secure connection (https://).',
+                        variant: 'destructive' 
+                    });
+                    return;
+                }
+
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    toast({ 
+                        title: 'Error', 
+                        description: 'Your browser does not support microphone access. Please use a modern browser.',
+                        variant: 'destructive' 
+                    });
+                    return;
+                }
+
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 const audioTracks = stream.getAudioTracks();
                 
                 if (audioTracks.length === 0) {
-                    console.error('[Mic] ERROR: Stream has no audio tracks!');
                     toast({ title: 'Error', description: 'Microphone stream has no audio tracks', variant: 'destructive' });
                     return;
                 }
@@ -80,10 +101,7 @@ export function useMicrophoneHandler({
                 setIsMicEnabled(true);
                 toast({ title: 'Microphone Enabled' });
 
-                // Create a FRESH WebRTC manager with our audio stream
-                // This ensures all connections are created with audio from the start
                 if (socketRef.current) {
-                    // Make sure old one is closed (safety check)
                     if (webrtcManagerRef.current) {
                         webrtcManagerRef.current.closeAll();
                     }
@@ -95,7 +113,6 @@ export function useMicrophoneHandler({
                         onConnectionChange: (userId: string, state: RTCPeerConnectionState) => {
                         },
                         onError: (userId: string, error: string) => {
-                            console.error(`[WebRTC] Error for ${userId}:`, error);
                             toast({
                                 title: 'Connection Error',
                                 description: `Error with ${userId}: ${error.slice(0, 60)}...`,
@@ -108,12 +125,10 @@ export function useMicrophoneHandler({
 
                 if (webrtcManagerRef.current) {
                     webrtcManagerRef.current.setLocalStream(stream);
-                    // Broadcast audio to all other users in the room
                     const otherUsers = onlineUsers.filter(u => u !== username);
                     await webrtcManagerRef.current.createConnectionsToAllUsers(otherUsers);
                 }
 
-                // Broadcast to room that audio is now available
                 if (socketRef.current) {
                     socketRef.current.emit('audio-broadcast-start', { roomId, username });
                 }
@@ -146,8 +161,24 @@ export function useMicrophoneHandler({
                         }
                     }
                 }, 100);
-            } catch (error) {
-                toast({ title: 'Error', description: 'Failed to access microphone', variant: 'destructive' });
+            } catch (error: any) {
+                let errorMessage = 'Failed to access microphone';
+                
+                console.error('[Audio] Error:', error.name, error.message);
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage = 'Microphone permission denied. Please grant permission in your browser settings.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage = 'No microphone found. Please connect a microphone device.';
+                } else if (error.name === 'NotReadableError') {
+                    errorMessage = 'Microphone is already in use by another application.';
+                } else if (error.name === 'SecurityError') {
+                    errorMessage = 'Security error: HTTPS is required for microphone access. Please ensure you\'re using a secure connection (https://).';
+                } else if (error.name === 'TypeError') {
+                    errorMessage = 'Microphone access error. Please ensure the app is accessed via HTTPS and permissions are granted.';
+                }
+                
+                toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
             }
         }
     }, [isMicEnabled, roomId, username, onlineUsers, socketRef, webrtcManagerRef, audioContextRef, analyserRef, micStreamRef, volumeCheckIntervalRef, isSpeakingRef, handleRemoteTrack, setIsMicEnabled, setIsSpeaking, toast]);
