@@ -12,10 +12,19 @@ const ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.stunprotocol.org:3478' },
+    { urls: 'stun:stun.services.mozilla.com:3478' },
     {
         urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
         username: 'openrelayproject',
         credential: 'openrelayproject',
+    },
+    {
+        urls: 'turn:numb.viagenie.ca',
+        username: 'webrtc@example.com',
+        credential: 'webrtc',
     },
 ];
 
@@ -56,12 +65,14 @@ export function createWebRTCManager(config: WebRTCConfig) {
                         pc.removeTrack(existingAudioSender);
                         pc.addTrack(audioTrack, stream);
                     } catch (e) {
+                        console.error(`[WebRTC] Failed to add audio track for ${userId}:`, e);
                     }
                 });
             } else {
                 try {
                     pc.addTrack(audioTrack, stream);
                 } catch (e) {
+                    console.error(`[WebRTC] Failed to add audio track for ${userId}:`, e);
                 }
             }
         });
@@ -79,9 +90,11 @@ export function createWebRTCManager(config: WebRTCConfig) {
             const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
             pc.onconnectionstatechange = () => {
+                console.log(`[WebRTC] Connection state change for ${userId}: ${pc.connectionState}`);
                 config.onConnectionChange(userId, pc.connectionState);
 
                 if (pc.connectionState === 'failed') {
+                    console.log(`[WebRTC] Connection to ${userId} failed, attempting ICE restart`);
                     pc.restartIce?.();
                 } else if (pc.connectionState === 'closed' || pc.connectionState === 'disconnected') {
                     removePeerConnection(userId);
@@ -138,6 +151,15 @@ export function createWebRTCManager(config: WebRTCConfig) {
         try {
             let pc: RTCPeerConnection | null = peerConnections.get(userId) || null;
 
+            if (pc && pc.signalingState === 'have-local-offer') {
+                if (config.username < userId) {
+                    return;
+                } else {
+                    removePeerConnection(userId);
+                    pc = null;
+                }
+            }
+
             if (pc && pc.connectionState === 'connected' && pc.signalingState !== 'stable') {
                 removePeerConnection(userId);
                 pc = null;
@@ -192,6 +214,7 @@ export function createWebRTCManager(config: WebRTCConfig) {
             }
 
             if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-remote-offer') {
+                console.warn(`[WebRTC] Cannot handle offer from ${userId}, signaling state is ${pc.signalingState}`);
                 return;
             }
 
@@ -270,7 +293,6 @@ export function createWebRTCManager(config: WebRTCConfig) {
 
         for (const userId of usersToConnect) {
             const existing = peerConnections.get(userId);
-            // Recreate connections in disconnected, failed, or closed states
             if (existing && (existing.connectionState === 'disconnected' || existing.connectionState === 'closed' || existing.connectionState === 'failed')) {
                 removePeerConnection(userId);
             } else if (existing && existing.connectionState !== 'closed' && existing.connectionState !== 'failed') {
