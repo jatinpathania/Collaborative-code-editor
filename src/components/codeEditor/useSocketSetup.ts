@@ -78,8 +78,13 @@ export function useSocketSetup({
             const socket = io(socketUrl, {
                 path: '/api/socket',
                 transports: ['websocket', 'polling'],
-                reconnectionAttempts: 10,
-                reconnectionDelay: 2000,
+                reconnectionAttempts: 15,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                randomizationFactor: 0.5,
+                timeout: 10000,
+                autoConnect: true,
+                forceNew: false,
             });
 
             socketRef.current = socket;
