@@ -88,11 +88,16 @@ export function useRemoteAudioHandler({
         document.body.appendChild(audioElement);
         console.log(`[Audio] Appended audio element to DOM for ${userId}`);
 
+        // Start with muted = true to bypass autoplay restrictions on desktop
+        audioElement.muted = true;
         const playPromise = audioElement.play();
         if (playPromise && typeof playPromise.then === 'function') {
             playPromise
                 .then(() => {
-                    console.log(`[Audio] ✓ Audio playing successfully for ${userId}`);
+                    console.log(`[Audio] ✓ Audio playing (muted) for ${userId}`);
+                    // Unmute immediately since we can now play
+                    audioElement.muted = false;
+                    console.log(`[Audio] ✓ Audio unmuted and playing for ${userId}`);
                 })
                 .catch(err => {
                     console.error(`[Audio] ✗ Play failed for ${userId}:`, err.name, err.message);
@@ -100,9 +105,12 @@ export function useRemoteAudioHandler({
                     // Retry on user interaction
                     const retryFn = () => {
                         console.log(`[Audio] Retrying playback for ${userId} after user interaction`);
+                        audioElement.muted = true;
                         audioElement.play()
                             .then(() => {
                                 console.log(`[Audio] ✓ Retry successful for ${userId}`);
+                                audioElement.muted = false;
+                                console.log(`[Audio] ✓ Retry: Audio unmuted for ${userId}`);
                             })
                             .catch(e => console.error(`[Audio] Retry failed for ${userId}:`, e.message));
                         document.removeEventListener('click', retryFn);
