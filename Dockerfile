@@ -1,4 +1,4 @@
-FROM node:18-alpine3.18 AS base
+FROM node:20-alpine3.18 AS base
 RUN apk add --no-cache libc6-compat openssl
 
 # Install dependencies only when needed
